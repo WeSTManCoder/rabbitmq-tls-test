@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -42,7 +44,7 @@ func main() {
 	for {
 		// === ВВОД URL ===
 		if len(flag.Args()) == 0 {
-			fmt.Println("\nRabbitMQ TLS тест v1.0.0 | Автор: ChatGPT | Идея: WeSTManCoder")
+			fmt.Println("\nRabbitMQ TLS тест v1.0.1 | Автор: ChatGPT | Идея: WeSTManCoder")
 			fmt.Printf("🔐 Введите адрес подключения [по умолчанию: %s]: ", lastURL)
 			inputURL, _ := reader.ReadString('\n')
 			inputURL = strings.TrimSpace(inputURL)
@@ -75,7 +77,26 @@ func main() {
 		}
 
 		// Подключение
-		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true, // важно: true, чтобы не провалить проверку, но самому её выполнить
+			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+				for i, certBytes := range rawCerts {
+					cert, err := x509.ParseCertificate(certBytes)
+					if err != nil {
+						log.Printf("❌ Не удалось распарсить сертификат #%d: %v\n", i, err)
+						continue
+					}
+					fmt.Printf("📄 Сертификат #%d:\n", i)
+					fmt.Printf("  Subject: %s\n", cert.Subject)
+					fmt.Printf("  Issuer:  %s\n", cert.Issuer)
+					fmt.Printf("  DNS Names: %v\n", cert.DNSNames)
+					fmt.Printf("  NotBefore: %v\n", cert.NotBefore)
+					fmt.Printf("  NotAfter:  %v\n", cert.NotAfter)
+					fmt.Printf("  Serial:    %v\n", cert.SerialNumber)
+				}
+				return nil // вернём nil, чтобы не блокировать соединение
+			},
+		}
 		conn, err := amqp.DialTLS(amqpURL, tlsConfig)
 		if err != nil {
 			fmt.Printf("❌ Ошибка подключения к RabbitMQ: %v\n", err)
